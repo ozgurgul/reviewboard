@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""Close open review requests on an archived Review Board repository.
+
+This talks to the Review Board API using RBTools, so closings are recorded
+against your account, show up in each review request's history, and send
+the usual e-mail notifications.
+
+By default this only lists what it would close. Pass ``--apply`` to close
+them.
+
+Requirements:
+    RBTools (``pip install RBTools``), and an API token for an administrator
+    (or a user with the "Can change status" permission). Archived
+    repositories are private, so a non-admin token may not see their review
+    requests at all.
+
+Example:
+    export RBTOOLS_API_TOKEN=...
+
+    # See what would be closed.
+    ./close-archived-repo-review-requests \\
+        --server https://reviews.example.com --repository 12
+
+    # Only the ones posted after the repository was archived, then close.
+    ./close-archived-repo-review-requests \\
+        --server https://reviews.example.com --repository 12 \\
+        --since 2026-10-01 --apply
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+
+from rbtools.api.client import RBClient
+from rbtools.api.errors import APIError, ServerInterfaceError
+
+
+DEFAULT_DESCRIPTION = (
+    'Closed automatically: this review request was posted against the '
+    'archived repository "{repository}". Please post it again against the '
+    'current repository.'
+)
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments.
+
+    Returns:
+        argparse.Namespace:
+        The parsed arguments.
+    """
+    parser = argparse.ArgumentParser(
+        description='Close open review requests on an archived repository.')
+    parser.add_argument(
+        '--server',
+        required=True,
+        help='The Review Board server URL.')
+    parser.add_argument(
+        '--repository',
+        required=True,
+        type=int,
+        help='The database ID of the archived repository. This is shown in '
+             'the repository\'s URL in the administration UI.')
+    parser.add_argument(
+        '--api-token',
+        default=os.environ.get('RBTOOLS_API_TOKEN'),
+        help='An API token to authenticate with. Defaults to the '
+             'RBTOOLS_API_TOKEN environment variable.')
+    parser.add_argument(
+        '--since',
+        help='Only close review requests added on or after this date or '
+             'date/time (ISO 8601, for example 2026-10-01 or '
+             '2026-10-01T14:30:00-07:00).')
+    parser.add_argument(
+        '--status',
+        choices=('discarded', 'submitted'),
+        default='discarded',
+        help='How to close the review requests (default: discarded).')
+    parser.add_argument(
+        '--description',
+        help='The close description to add. Defaults to a note pointing '
+             'people at the current repository.')
+    parser.add_argument(
+        '--include-unpublished',
+        action='store_true',
+        help='Also close review requests that were never published.')
+    parser.add_argument(
+        '--allow-unarchived',
+        action='store_true',
+        help='Allow running against a repository that is not archived.')
+    parser.add_argument(
+        '--apply',
+        action='store_true',
+        help='Actually close the review requests. Without this, only '
+             'list them.')
+
+    return parser.parse_args()
+
+
+def main() -> int:
+    """Run the script.
+
+    Returns:
+        int:
+        The exit code.
+    """
+    args = parse_args()
+
+    if not args.api_token:
+        sys.stderr.write('An API token is required. Pass --api-token or set '
+                         'RBTOOLS_API_TOKEN.\n')
+        return 1
+
+    try:
+        client = RBClient(args.server, api_token=args.api_token)
+        root = client.get_root()
+
+        repository = root.get_repository(repository_id=args.repository)
+    except (APIError, ServerInterfaceError) as e:
+        sys.stderr.write('Unable to look up repository %s: %s\n'
+                         % (args.repository, e))
+        return 1
+
+    # Archiving renames the repository to "ar:<name>:<timestamp>".
+    if (not repository.name.startswith('ar:') and
+        not args.allow_unarchived):
+        sys.stderr.write(
+            'Repository %s ("%s") does not look archived. Refusing to close '
+            'its review requests. Pass --allow-unarchived to override.\n'
+            % (repository.id, repository.name))
+        return 1
+
+    # Show the original name in messages, not the archived one.
+    display_name = repository.name.split(':')[1] \
+        if repository.name.startswith('ar:') else repository.name
+    description = (args.description or
+                   DEFAULT_DESCRIPTION.format(repository=display_name))
+
+    query = {
+        'repository': repository.id,
+        'status': 'pending',
+        'max_results': 200,
+    }
+
+    if args.since:
+        query['time_added_from'] = args.since
+
+    if args.include_unpublished:
+        query['show_all_unpublished'] = 1
+
+    try:
+        review_requests = list(
+            root.get_review_requests(**query).all_items)
+    except (APIError, ServerInterfaceError) as e:
+        sys.stderr.write('Unable to list review requests: %s\n' % e)
+        return 1
+
+    print('Repository %s ("%s"): %d open review request(s)%s.'
+          % (repository.id, display_name, len(review_requests),
+             ' added since %s' % args.since if args.since else ''))
+
+    if not review_requests:
+        return 0
+
+    for review_request in review_requests:
+        print('  r/%s  %s  %s%s  %s'
+              % (review_request.id,
+                 review_request.time_added,
+                 review_request.links.submitter.title,
+                 '' if review_request.public else ' (unpublished)',
+                 review_request.summary))
+
+    if not args.apply:
+        print('\nDry run. Pass --apply to mark these as %s.' % args.status)
+        return 0
+
+    failures = 0
+
+    for review_request in review_requests:
+        try:
+            review_request.update(
+                status=args.status,
+                close_description=description,
+                close_description_text_type='plain')
+            print('Closed r/%s as %s.' % (review_request.id, args.status))
+        except APIError as e:
+            failures += 1
+            sys.stderr.write('Unable to close r/%s: %s\n'
+                             % (review_request.id, e))
+
+    print('\nClosed %d of %d review request(s).'
+          % (len(review_requests) - failures, len(review_requests)))
+
+    return 1 if failures else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
