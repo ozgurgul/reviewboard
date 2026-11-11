@@ -435,6 +435,38 @@ class AccessibleTests(AccessibleTestsMixin, TestCase):
             user=user,
             visible_only=True)
 
+    def test_with_member_archived(self) -> None:
+        """Testing Repository.objects.accessible with member,
+        visible_only=False, and an archived repository
+        """
+        user = self.create_user()
+        repositories = self._create_accessible_repository_data(
+            user=user,
+            with_member=True)[0]
+        repositories[2].archive()
+
+        self._test_accessible(
+            repositories=repositories[:4],
+            user=user,
+            visible_only=False)
+
+    def test_with_member_visible_only_archived(self) -> None:
+        """Testing Repository.objects.accessible with member,
+        visible_only=True, and an archived repository
+        """
+        user = self.create_user()
+        repositories = self._create_accessible_repository_data(
+            user=user,
+            with_member=True)[0]
+        repositories[2].archive()
+
+        # Members can see hidden repositories, but not archived ones.
+        self._test_accessible(
+            repositories=[repositories[0], repositories[1],
+                          repositories[3]],
+            user=user,
+            visible_only=True)
+
     @add_fixtures(['test_site'])
     def test_with_member_local_site(self) -> None:
         """Testing Repository.objects.accessible with member, Local Site,
@@ -538,6 +570,23 @@ class AccessibleTests(AccessibleTestsMixin, TestCase):
         # piece of intentional logic in Group.objects.accessible().
         self._test_accessible(
             repositories=repositories[:4],
+            user=user,
+            visible_only=True)
+
+    def test_with_member_by_group_visible_only_archived(self) -> None:
+        """Testing Repository.objects.accessible with member by group,
+        visible_only=True, and an archived repository
+        """
+        user = self.create_user()
+        repositories = self._create_accessible_repository_data(
+            user=user,
+            with_member_by_group=True)[0]
+        repositories[2].archive()
+
+        # Members can see hidden repositories, but not archived ones.
+        self._test_accessible(
+            repositories=[repositories[0], repositories[1],
+                          repositories[3]],
             user=user,
             visible_only=True)
 

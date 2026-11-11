@@ -261,6 +261,11 @@ class DraftDiffCommitResource(DiffCommitResource):
                 'reason': 'This review request was created as attachments-'
                           'only, with no repository.',
             }
+        elif review_request.repository.archived:
+            return INVALID_ATTRIBUTE, {
+                'reason': "This review request's repository has been "
+                          'archived, so it can no longer accept new diffs.',
+            }
         elif not review_request.created_with_history:
             reverse_kwargs = {
                 'review_request_id': kwargs['review_request_id'],

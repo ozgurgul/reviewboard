@@ -219,6 +219,35 @@ class ResourceListTests(kgb.SpyAgency, ExtraDataListMixin,
         self.assertEqual(rsp['stat'], 'fail')
         self.assertEqual(rsp['err']['code'], INVALID_ATTRIBUTE.code)
 
+    def test_post_with_archived_repository(self):
+        """Testing the POST review-requests/<id>/diffs API
+        with a ReviewRequest on an archived repository
+        """
+        repository = self.create_repository(tool_name='Test')
+        review_request = self.create_review_request(
+            repository=repository,
+            submitter=self.user)
+        repository.archive()
+
+        diff = SimpleUploadedFile('diff', self.DEFAULT_GIT_README_DIFF,
+                                  content_type='text/x-patch')
+
+        rsp = self.api_post(
+            get_diff_list_url(review_request),
+            {
+                'path': diff,
+                'basedir': '/trunk',
+            },
+            expected_status=400)
+
+        self.assertEqual(rsp['stat'], 'fail')
+        self.assertEqual(rsp['err']['code'], INVALID_ATTRIBUTE.code)
+        self.assertEqual(
+            rsp['reason'],
+            "This review request's repository has been archived, so it can "
+            'no longer accept new diffs.')
+        self.assertFalse(DiffSet.objects.exists())
+
     @webapi_test_template
     def test_post_with_history(self):
         """Testing the POST <URL> API with a diff and a review request created

@@ -223,6 +223,40 @@ class ResourceListTests(BaseWebAPITestCase, metaclass=BasicTestsMetaclass):
             'Use the draft_diff resource to upload diffs instead. See the '
             'draft_diff link on the parent resource for the URL.')
 
+    def test_post_with_archived_repository(self):
+        """Testing the POST <URL> API for a review request on an archived
+        repository
+        """
+        repository = self.create_repository(tool_name='Git')
+        review_request = self.create_review_request(
+            repository=repository,
+            submitter=self.user,
+            create_with_history=True)
+        ReviewRequestDraft.create(review_request)
+        diffset = self.create_diffset(review_request, draft=True)
+        repository.archive()
+
+        diff = SimpleUploadedFile('diff',
+                                  self._DEFAULT_DIFF_CONTENTS,
+                                  content_type='text/x-patch')
+
+        with override_feature_checks(self.override_features):
+            rsp = self.api_post(
+                get_draft_diffcommit_list_url(review_request,
+                                              diffset.revision),
+                dict(self._DEFAULT_POST_DATA, **{
+                    'diff': diff,
+                }),
+                expected_status=400)
+
+        self.assertEqual(rsp['stat'], 'fail')
+        self.assertEqual(rsp['err']['code'], INVALID_ATTRIBUTE.code)
+        self.assertEqual(
+            rsp['reason'],
+            "This review request's repository has been archived, so it can "
+            'no longer accept new diffs.')
+        self.assertFalse(DiffCommit.objects.exists())
+
     @webapi_test_template
     def test_post_parent_diff(self):
         """Testing the POST <URL> API with a parent diff"""

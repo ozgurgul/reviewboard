@@ -306,6 +306,11 @@ class DiffResource(WebAPIResource):
                 'reason': 'This review request was created as attachments-'
                           'only, with no repository.',
             }
+        elif review_request.repository.archived:
+            return INVALID_ATTRIBUTE, {
+                'reason': "This review request's repository has been "
+                          'archived, so it can no longer accept new diffs.',
+            }
         elif created_with_history:
             assert dvcs_feature.is_enabled(request=request)
 

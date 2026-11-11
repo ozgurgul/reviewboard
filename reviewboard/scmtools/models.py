@@ -1201,6 +1201,16 @@ class Repository(models.Model):
         New repositories can be created with the same information as the
         archived repository.
 
+        The repository is also made private, so its existing review requests
+        can only be accessed by their submitters, administrators, and users
+        on the repository's access lists.
+
+        Version Changed:
+            10.0:
+            The repository is now also marked as hidden, so it no longer
+            appears to superusers or users on its access lists when posting
+            review requests.
+
         Args:
             save (bool, optional):
                 Whether to save the repository immediately.
@@ -1219,10 +1229,11 @@ class Repository(models.Model):
                                   encoded_time)
         self.archived = True
         self.public = False
+        self.visible = False
         self.archived_timestamp = timezone.now()
 
         if save:
-            self.save(update_fields=('name', 'archived', 'public',
+            self.save(update_fields=('name', 'archived', 'public', 'visible',
                                      'archived_timestamp'))
 
     def save(self, *args, **kwargs) -> None:

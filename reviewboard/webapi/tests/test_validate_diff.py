@@ -249,6 +249,30 @@ class ResourceTests(kgb.SpyAgency, SSLTestsMixin, BaseWebAPITestCase,
         self.assertEqual(rsp['repository'], repository.path)
 
     @webapi_test_template
+    def test_post_with_archived_repository(self) -> None:
+        """Testing the POST <URL> API with an archived repository the user
+        is on the access list for
+        """
+        repository = self.create_repository(tool_name='Test')
+        repository.users.add(self.user)
+        repository.archive()
+
+        diff = SimpleUploadedFile('readme.diff', self.VALID_GIT_DIFF,
+                                  content_type='text/x-patch')
+        rsp = self.api_post(
+            get_validate_diff_url(),
+            {
+                'repository': repository.pk,
+                'path': diff,
+                'basedir': '/trunk',
+            },
+            expected_status=400)
+        assert rsp is not None
+
+        self.assertEqual(rsp['stat'], 'fail')
+        self.assertEqual(rsp['err']['code'], INVALID_REPOSITORY.code)
+
+    @webapi_test_template
     def test_post_repository_private(self):
         """Testing the POST <URL> API without access to the requested
         repository

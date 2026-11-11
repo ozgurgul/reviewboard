@@ -5,7 +5,8 @@ import unittest
 import kgb
 from djblets.webapi.testing.decorators import webapi_test_template
 
-from reviewboard.webapi.errors import REPO_NOT_IMPLEMENTED
+from reviewboard.webapi.errors import (INVALID_REPOSITORY,
+                                       REPO_NOT_IMPLEMENTED)
 from reviewboard.webapi.resources import resources
 from reviewboard.webapi.tests.base import BaseWebAPITestCase
 from reviewboard.webapi.tests.mimetypes import \
@@ -61,6 +62,20 @@ class ResourceTests(kgb.SpyAgency, SSLTestsMixin, BaseWebAPITestCase,
                     'default': False
                 },
             ])
+
+    @webapi_test_template
+    def test_get_with_archived(self) -> None:
+        """Testing the GET <URL> API with an archived repository"""
+        repository = self.create_repository(tool_name='Test')
+        repository.archive()
+
+        rsp = self.api_get(get_repository_branches_url(repository),
+                           expected_status=400)
+        assert rsp is not None
+        self.assertEqual(rsp['stat'], 'fail')
+        self.assertEqual(rsp['err']['code'], INVALID_REPOSITORY.code)
+        self.assertEqual(rsp['err']['msg'],
+                         'This repository has been archived.')
 
     def test_get_with_no_support(self):
         """Testing the GET repositories/<id>/branches/ API

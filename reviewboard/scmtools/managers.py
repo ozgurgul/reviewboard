@@ -202,6 +202,11 @@ class RepositoryManager(Manager['Repository']):
         ``visible_only`` and ``local_site`` parameters.
 
         Version Changed:
+            10.0:
+            Archived repositories are no longer returned to members when
+            ``visible_only`` is set.
+
+        Version Changed:
             6.0:
             Removed the ``show_all_local_sites`` argument.
 
@@ -260,8 +265,15 @@ class RepositoryManager(Manager['Repository']):
                 q &= Q(visible=True)
 
             if user.is_authenticated:
-                q |= (Q(users__pk=user.pk) |
-                      Q(review_groups__users=user.pk))
+                member_q = (Q(users__pk=user.pk) |
+                            Q(review_groups__users=user.pk))
+
+                if visible_only:
+                    # Members can see hidden repositories, but not archived
+                    # ones. Those have been retired.
+                    member_q &= Q(archived=False)
+
+                q |= member_q
 
         if local_site is not LocalSite.ALL:
             q &= Q(local_site=local_site)

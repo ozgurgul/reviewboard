@@ -152,7 +152,9 @@ class RepositoryResource(UpdateFormMixin, WebAPIResource):
                 visible_only=not show_invisible,
                 local_site=local_site)
 
-            q = Q()
+            # Archived repositories have been retired, so they're never
+            # listed, even with show-invisible.
+            q = Q(archived=False)
 
             if 'q' in request.GET:
                 query = request.GET['q']
@@ -313,7 +315,8 @@ class RepositoryResource(UpdateFormMixin, WebAPIResource):
             'show-invisible': {
                 'type': BooleanFieldType,
                 'description': 'Whether to list only visible repositories or '
-                               'all repositories.',
+                               'all repositories. Archived repositories are '
+                               'never listed.',
                 'added_in': '2.0',
             },
             'q': {
@@ -330,7 +333,8 @@ class RepositoryResource(UpdateFormMixin, WebAPIResource):
         """Retrieves the list of repositories on the server.
 
         This will only list visible repositories. Any repository that the
-        administrator has hidden will be excluded from the list.
+        administrator has hidden will be excluded from the list, unless
+        ``show-invisible`` is set. Archived repositories are never listed.
         """
         show_invisible = request.GET.get('show-invisible', False)
         return super(RepositoryResource, self).get_list(

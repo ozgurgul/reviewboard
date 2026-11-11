@@ -17,6 +17,7 @@ from reviewboard.hostingsvcs.models import (
     ConfiguredBugTracker,
     HostingServiceAccount,
 )
+from reviewboard.reviews.models import ReviewRequest
 from reviewboard.scmtools.core import FileLookupContext
 from reviewboard.scmtools.git import GitTool
 from reviewboard.scmtools.models import Repository, Tool
@@ -49,6 +50,7 @@ class RepositoryTests(kgb.SpyAgency, TestCase):
         self.assertTrue(repository1.name.startswith('ar:Git test repo:'))
         self.assertTrue(repository1.archived)
         self.assertFalse(repository1.public)
+        self.assertFalse(repository1.visible)
         self.assertIsNotNone(repository1.archived_timestamp)
 
         repository2 = Repository.objects.get(pk=repository1.pk)
@@ -58,6 +60,8 @@ class RepositoryTests(kgb.SpyAgency, TestCase):
                          repository1.archived)
         self.assertEqual(repository2.public,
                          repository1.public)
+        self.assertEqual(repository2.visible,
+                         repository1.visible)
         self.assertEqual(repository2.archived_timestamp,
                          repository1.archived_timestamp)
 
@@ -69,6 +73,7 @@ class RepositoryTests(kgb.SpyAgency, TestCase):
         self.assertTrue(repository1.name.startswith('ar:Git test repo:'))
         self.assertTrue(repository1.archived)
         self.assertFalse(repository1.public)
+        self.assertFalse(repository1.visible)
         self.assertIsNotNone(repository1.archived_timestamp)
 
         repository2 = Repository.objects.get(pk=repository1.pk)
@@ -78,8 +83,43 @@ class RepositoryTests(kgb.SpyAgency, TestCase):
                             repository1.archived)
         self.assertNotEqual(repository2.public,
                             repository1.public)
+        self.assertNotEqual(repository2.visible,
+                            repository1.visible)
         self.assertNotEqual(repository2.archived_timestamp,
                             repository1.archived_timestamp)
+
+    def test_archive_review_request_access(self):
+        """Testing Repository.archive limits access to existing review
+        requests to submitters, administrators, and users on the access list
+        """
+        submitter = self.create_user(username='submitter',
+                                     email='submitter@example.com')
+        member = self.create_user(username='member',
+                                  email='member@example.com')
+        other = self.create_user(username='other',
+                                 email='other@example.com')
+        admin = self.create_user(username='admin',
+                                 email='admin@example.com',
+                                 is_superuser=True)
+
+        repository = self.repository
+        repository.users.add(member)
+
+        review_request = self.create_review_request(repository=repository,
+                                                    submitter=submitter,
+                                                    publish=True)
+
+        for user in (submitter, member, other, admin):
+            self.assertTrue(review_request.is_accessible_by(user))
+
+        repository.archive()
+        review_request = ReviewRequest.objects.get(pk=review_request.pk)
+
+        for user in (submitter, member, admin):
+            self.assertTrue(review_request.is_accessible_by(user))
+
+        self.assertFalse(review_request.is_accessible_by(other))
+        self.assertFalse(review_request.is_accessible_by(AnonymousUser()))
 
     def test_clean_without_conflict(self):
         """Testing Repository.clean without name/path conflicts"""

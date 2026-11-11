@@ -258,6 +258,31 @@ class ResourceTests(SpyAgency, SSLTestsMixin, BaseWebAPITestCase,
         self.assertEqual(rsp['stat'], 'fail')
         self.assertEqual(rsp['err']['code'], INVALID_REPOSITORY.code)
 
+    def test_post_repo_archived(self):
+        """Testing the POST <URL> API with an archived repository the user is
+        on the access list for
+        """
+        repo = self.create_repository()
+        repo.users.add(self.user)
+        repo.archive()
+
+        with override_feature_checks(self.override_features):
+            rsp = self.api_post(
+                get_validate_diffcommit_url(),
+                {
+                    'commit_id': 'r1',
+                    'parent_id': 'r0',
+                    'diff': SimpleUploadedFile(
+                        'diff',
+                        self.DEFAULT_GIT_FILEDIFF_DATA_DIFF,
+                        content_type='text/x-patch'),
+                    'repository': repo.pk,
+                },
+                expected_status=400)
+
+        self.assertEqual(rsp['stat'], 'fail')
+        self.assertEqual(rsp['err']['code'], INVALID_REPOSITORY.code)
+
     @webapi_test_template
     def test_post_with_ssl_error(self) -> None:
         """Testing the POST <URL> API with CertificateVerificationError"""

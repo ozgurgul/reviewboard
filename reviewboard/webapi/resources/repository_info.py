@@ -8,7 +8,9 @@ from reviewboard.scmtools.errors import AuthenticationError
 from reviewboard.webapi.base import WebAPIResource
 from reviewboard.webapi.decorators import (webapi_check_local_site,
                                            webapi_check_login_required)
-from reviewboard.webapi.errors import REPO_INFO_ERROR, REPO_NOT_IMPLEMENTED
+from reviewboard.webapi.errors import (INVALID_REPOSITORY,
+                                       REPO_INFO_ERROR,
+                                       REPO_NOT_IMPLEMENTED)
 from reviewboard.webapi.resources import resources
 
 
@@ -28,8 +30,8 @@ class RepositoryInfoResource(WebAPIResource):
 
     @webapi_check_local_site
     @webapi_check_login_required
-    @webapi_response_errors(DOES_NOT_EXIST, REPO_NOT_IMPLEMENTED,
-                            REPO_INFO_ERROR)
+    @webapi_response_errors(DOES_NOT_EXIST, INVALID_REPOSITORY,
+                            REPO_NOT_IMPLEMENTED, REPO_INFO_ERROR)
     def get(self, request, *args, **kwargs):
         """Returns repository-specific information from a server."""
         try:
@@ -37,6 +39,10 @@ class RepositoryInfoResource(WebAPIResource):
                                                          **kwargs)
         except ObjectDoesNotExist:
             return DOES_NOT_EXIST
+
+        if repository.archived:
+            return INVALID_REPOSITORY.with_message(
+                'This repository has been archived.')
 
         try:
             tool = repository.get_scmtool()

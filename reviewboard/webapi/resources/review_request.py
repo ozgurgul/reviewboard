@@ -828,6 +828,8 @@ class ReviewRequestResource(MarkdownFieldsMixin,
             create_with_history = False
 
         if repository is not None:
+            repository_identifier = repository
+
             try:
                 repository = Repository.objects.get_best_match(
                     repo_identifier=repository,
@@ -847,6 +849,15 @@ class ReviewRequestResource(MarkdownFieldsMixin,
 
             if not repository.is_accessible_by(request.user):
                 return self.get_no_access_error(request)
+
+            if repository.archived:
+                msg = ('The repository "%s" has been archived and can no '
+                       'longer be used for new review requests.'
+                       % repository_identifier)
+
+                return INVALID_REPOSITORY.with_message(msg), {
+                    'repository': repository_identifier,
+                }
 
         try:
             review_request = ReviewRequest.objects.create(

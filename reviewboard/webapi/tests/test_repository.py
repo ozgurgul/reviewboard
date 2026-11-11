@@ -239,6 +239,46 @@ class ResourceListTests(ExtraDataListMixin, BaseRepositoryTests,
         self.assertEqual(rsp['repositories'][1]['name'], 'test2')
 
     @webapi_test_template
+    def test_get_with_archived_as_admin(self) -> None:
+        """Testing the GET <URL> API with an archived repository as an
+        administrator
+        """
+        self.login_user(admin=True)
+
+        self.create_repository(name='test1', tool_name='Test')
+        self.create_repository(name='test2', tool_name='Test').archive()
+
+        for data in ({}, {'show-invisible': True}):
+            rsp = self.api_get(get_repository_list_url(),
+                               data=data,
+                               expected_mimetype=repository_list_mimetype)
+            assert rsp is not None
+            self.assertEqual(rsp['stat'], 'ok')
+            self.assertEqual(
+                [repo['name'] for repo in rsp['repositories']],
+                ['test1'])
+
+    @webapi_test_template
+    def test_get_with_archived_as_member(self) -> None:
+        """Testing the GET <URL> API with an archived repository the user is
+        on the access list for
+        """
+        self.create_repository(name='test1', tool_name='Test')
+        repository = self.create_repository(name='test2', tool_name='Test')
+        repository.users.add(self.user)
+        repository.archive()
+
+        for data in ({}, {'show-invisible': True}):
+            rsp = self.api_get(get_repository_list_url(),
+                               data=data,
+                               expected_mimetype=repository_list_mimetype)
+            assert rsp is not None
+            self.assertEqual(rsp['stat'], 'ok')
+            self.assertEqual(
+                [repo['name'] for repo in rsp['repositories']],
+                ['test1'])
+
+    @webapi_test_template
     def test_get_repositories_with_name(self) -> None:
         """Testing the GET <URL>?name= API"""
         self.create_repository(name='test1', tool_name='Test')

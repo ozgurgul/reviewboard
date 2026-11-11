@@ -30,6 +30,11 @@ def get_repositories_accessible_equeries(
 ) -> ExpectedQueries:
     """Return expected queries for Repository.objects.accessible().
 
+    Version Changed:
+        10.0:
+        Archived repositories are excluded for members when
+        ``visible_only`` is set.
+
     Version Added:
         5.0.7
 
@@ -88,13 +93,15 @@ def get_repositories_accessible_equeries(
             if local_site is LocalSite.ALL:
                 repositories_where = ((Q(public=True) &
                                        Q(visible=True)) |
-                                      Q(users__pk=user.pk) |
-                                      Q(review_groups__users=user.pk))
+                                      ((Q(users__pk=user.pk) |
+                                        Q(review_groups__users=user.pk)) &
+                                       Q(archived=False)))
             else:
                 repositories_where = (((Q(public=True) &
                                         Q(visible=True)) |
-                                       Q(users__pk=user.pk) |
-                                       Q(review_groups__users=user.pk)) &
+                                       ((Q(users__pk=user.pk) |
+                                         Q(review_groups__users=user.pk)) &
+                                        Q(archived=False))) &
                                       Q(local_site=local_site))
         else:
             if local_site is LocalSite.ALL:

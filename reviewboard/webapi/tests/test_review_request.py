@@ -1266,6 +1266,48 @@ class ResourceListTests(kgb.SpyAgency, ExtraDataListMixin, SSLTestsMixin,
         self.assertEqual(rsp['err']['code'], INVALID_REPOSITORY.code)
 
     @add_fixtures(['test_scmtools'])
+    def test_post_with_archived_repository_error(self):
+        """Testing the POST review-requests/ API with an archived repository
+        """
+        repository = self.create_repository()
+        repository.users.add(self.user)
+        repository.archive()
+
+        rsp = self.api_post(
+            get_review_request_list_url(),
+            {'repository': repository.pk},
+            expected_status=400)
+        self.assertEqual(rsp['stat'], 'fail')
+        self.assertEqual(rsp['err']['code'], INVALID_REPOSITORY.code)
+        self.assertEqual(rsp['err']['msg'],
+                         'The repository "%s" has been archived and can no '
+                         'longer be used for new review requests.'
+                         % repository.pk)
+        self.assertFalse(ReviewRequest.objects.exists())
+
+    @add_fixtures(['test_scmtools'])
+    def test_post_with_archived_and_new_repository_same_path(self):
+        """Testing the POST review-requests/ API with an archived repository
+        and its replacement sharing a path
+        """
+        old_repository = self.create_repository(name='Legacy',
+                                                path='/repo')
+        old_repository.archive()
+
+        new_repository = self.create_repository(name='Fresh',
+                                                path='/repo')
+
+        rsp = self.api_post(
+            get_review_request_list_url(),
+            {'repository': '/repo'},
+            expected_mimetype=review_request_item_mimetype)
+        self.assertEqual(rsp['stat'], 'ok')
+
+        review_request = ReviewRequest.objects.get(
+            pk=rsp['review_request']['id'])
+        self.assertEqual(review_request.repository, new_repository)
+
+    @add_fixtures(['test_scmtools'])
     def test_post_with_conflicting_repos_prefer_visible(self):
         """Testing the POST review-requests/ API with conflicting
         repositories, preferring visible over name/path/mirror_path

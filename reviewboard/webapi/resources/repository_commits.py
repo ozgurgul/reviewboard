@@ -13,7 +13,8 @@ from reviewboard.scmtools.errors import SCMError
 from reviewboard.webapi.base import WebAPIResource
 from reviewboard.webapi.decorators import (webapi_check_login_required,
                                            webapi_check_local_site)
-from reviewboard.webapi.errors import (REPO_INFO_ERROR,
+from reviewboard.webapi.errors import (INVALID_REPOSITORY,
+                                       REPO_INFO_ERROR,
                                        REPO_NOT_IMPLEMENTED,
                                        UNVERIFIED_HOST_CERT)
 from reviewboard.webapi.resources import resources
@@ -75,6 +76,7 @@ class RepositoryCommitsResource(WebAPIResource):
     @webapi_check_login_required
     @webapi_response_errors(
         DOES_NOT_EXIST,
+        INVALID_REPOSITORY,
         REPO_INFO_ERROR,
         REPO_NOT_IMPLEMENTED,
         UNVERIFIED_HOST_CERT,
@@ -107,6 +109,10 @@ class RepositoryCommitsResource(WebAPIResource):
                                                          **kwargs)
         except ObjectDoesNotExist:
             return DOES_NOT_EXIST
+
+        if repository.archived:
+            return INVALID_REPOSITORY.with_message(
+                'This repository has been archived.')
 
         try:
             items = repository.get_commits(branch=branch, start=start)
